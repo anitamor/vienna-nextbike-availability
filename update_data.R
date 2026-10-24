@@ -3,22 +3,22 @@
 # Each run:
 #   1. GET the station information and station status feeds
 #   2. Check if the data looks right
-#   3. Append one row per station to data/snapshots.csv (only if all checks pass) # nolint
+#   3. Append one row per station to data/snapshots.csv (only if all checks pass) 
 #   4. Append one row per run to data/check_log.csv (PASS or FAIL)
 #
-# Run from the project folder:  Rscript update_data.R
+
 
 library(tidyverse)
 library(httr)
 library(glue)
-q
+
 # Settings ----------------------------------------------------------------
 
-# The first URL that works is used. Find the current address of the system
-# "nextbike_wr" in https://github.com/MobilityData/gbfs/blob/master/systems.csv
+# The first URL that works is used.
+# Source: MobilityData GBFS catalogue (systems.csv), system "nextbike_wr"
 gbfs_urls <- c(
-  "https://api.nextbike.net/maps/gbfs/v1/nextbike_wr/gbfs.json",
-  "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/gbfs.json"
+  "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/gbfs.json",
+  "https://api.nextbike.net/maps/gbfs/v1/nextbike_wr/gbfs.json"
 )
 
 data_dir <- "data"
