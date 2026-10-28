@@ -54,3 +54,45 @@ ggsave(
   height = 6,
   dpi = 300
 )
+##create weekday and weekend variable
+bike_data <- bike_data %>%
+  mutate(
+    day_type = if_else(
+      wday(vienna_time, week_start = 1) >= 6,
+      "Weekend",
+      "Weekday"
+    )
+  )
+##calculate percentage of empty stations by hour and day type
+weekday_weekend_data <- bike_data %>%
+  filter(!is.na(empty), !is.na(day_type)) %>%
+  group_by(day_type, hour) %>%
+  summarise(
+    pct_empty = mean(empty) * 100,
+    n_observations = n(),
+    .groups = "drop"
+  )
+print(weekday_weekend_data, n = 48)
+
+ggplot(
+  weekday_weekend_data,
+  aes(x = hour, y = pct_empty, colour = day_type)
+) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = 0:23) +
+  labs(
+    title = "Bike Station Availability: Weekdays vs Weekends",
+    subtitle = "Percentage of station observations with zero available bikes",
+    x = "Hour of Day (Vienna Time)",
+    y = "Empty Station Observations (%)",
+    colour = "Day Type"
+  ) +
+  theme_minimal()
+
+ggsave(
+  "weekday_weekend_availability.png",
+  width = 10,
+  height = 6,
+  dpi = 300
+)
