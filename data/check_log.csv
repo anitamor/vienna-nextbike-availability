@@ -158,3 +158,4 @@ run_at_utc,overall,feed_url,stations,feed_age_s,failed_checks,details
 2026-10-28T23:44:10+00:00,PASS,https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json,262,24,,station_count: TRUE | feed_fresh: TRUE | bikes_valid: TRUE | no_duplicate_ids: TRUE | coords_in_vienna: TRUE
 2026-10-29T00:14:11+00:00,PASS,https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json,262,57,,station_count: TRUE | feed_fresh: TRUE | bikes_valid: TRUE | no_duplicate_ids: TRUE | coords_in_vienna: TRUE
 2026-10-29T01:07:26+00:00,PASS,https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json,262,21,,station_count: TRUE | feed_fresh: TRUE | bikes_valid: TRUE | no_duplicate_ids: TRUE | coords_in_vienna: TRUE
+2026-10-29T02:00:08+00:00,PASS,https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json,262,12,,station_count: TRUE | feed_fresh: TRUE | bikes_valid: TRUE | no_duplicate_ids: TRUE | coords_in_vienna: TRUE
