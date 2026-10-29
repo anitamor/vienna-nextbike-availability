@@ -35,7 +35,7 @@ library(jsonlite)
 
 # The task and the idea
 
-Bike-share stations are sometimes empty (no bike to rent) or full (no free dock to return a bike). We want to know where and when this happens in Vienna. This needs data over several days, which is tedious to collect by hand, because the numbers change every minute. Therefore, we wrote the R script `update_data.R` that downloads the current number of bikes at every station from an API and appends it to the `data/snapshots.csv`. GitHub Actions runs the script every 15 minutes and saves the updated files back to the repository.
+Bike-share stations are sometimes empty (no bike to rent). We want to know where and when this happens in Vienna: this needs data over several days, which is tedious to collect by hand, because the numbers change every minute. Therefore, we wrote the R script `update_data.R` that downloads the current number of bikes at every station from an API and appends it to the `data/snapshots.csv`. GitHub Actions runs the script every 15 minutes and saves the updated files back to the repository.
 
 After each download, the script tests whether the data looks right and writes the result (PASS or FAIL) in the `data/check_log.csv.`
 
@@ -73,9 +73,7 @@ The list of feeds contains the addresses of `station_status` and `station_inform
 
 ```{r}
 #| eval: true
-#| echo: true
 #| output: true
-
 status_url <- "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json"
 
 status_data <- jsonlite::fromJSON(status_url)
@@ -94,9 +92,7 @@ And the fixed information about each station:
 
 ```{r}
 #| eval: true
-#| echo: true
 #| output: true
-
 info_url <- "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_information.json"
 
 info_data <- jsonlite::fromJSON(info_url)
@@ -302,7 +298,7 @@ jobs:
 
 What the parts do:
 
-- **When it runs:** `cron: "*/15 * * * *"` starts the workflow every 15 minutes (`*/15` in the minute field means "every 15 minutes"; GitHub uses UTC). `workflow_dispatch` adds a button in the Actions tab to start a run by hand, which is useful for testing. Although the workflow is set to run every 15 minutes, GitHub does not start scheduled runs on time, because the shared servers are often busy. Hence, some runs were delayed or skipped, so in practice the runs came on average about every 40 minutes (169 runs in about 5 days, with gaps of 30 to 80 minutes).
+- **When it runs:** `cron: "*/15 * * * *"` starts the workflow every 15 minutes (`*/15` in the minute field means "every 15 minutes"; GitHub uses UTC). `workflow_dispatch` adds a button in the Actions tab to start a run by hand, which is useful for testing. Although the workflow is set to run every 15 minutes, GitHub does not start scheduled runs on time, because the shared servers are often busy. Hence, some runs were delayed or skipped, so in practice the runs came on average about every 40 minutes (176 runs in about 5 days, with gaps of 30 to 80 minutes).
 - **Permissions:** `contents: write` allows the workflow to save files in the repository.
 - **Concurrency:** if a run is still going when the next one is due, the new run waits instead of running at the same time. Two runs appending to the same CSV files at once could mix up the data.
 - **Setup:** the first three steps get a copy of the repository, install R, and install the packages. `jsonlite` is installed together with `tidyverse`, which depends on it.
@@ -310,50 +306,76 @@ What the parts do:
 - **Saving:** the files the script writes only exist on GitHub's server during the run, so this step commits them back to the repository. If nothing changed, it does nothing. `git pull --rebase` first takes over any commits that were pushed in the meantime, so that the push does not fail.
 - **Reporting:** if the script failed, the last step ends with an error on purpose. The run then gets a red cross in the Actions tab, so a failed run is visible without opening the log, while its log line has still been saved.
 
-
 # Did the automation work?
 
-After collecting for several days, the log file shows how well the automation worked. The following chunks are only evaluated if the file `data/check_log.csv` exists.
+After collecting for several days, `data/check_log.csv` shows the list of all the runs that were automatically performed, and `data/snapshots.csv` collects the entire dataset from every run, with a timestamp for each snapshot, so that changes over time can be compared and analysed.
+
+![](images/checklog.png)
+
+![](images/snapshotdata.png)
 
 ```{r}
+#| label: setup-check-log
 #| eval: !expr file.exists("data/check_log.csv")
-#| output: true
-check_log <- read_csv("data/check_log.csv", show_col_types = FALSE)
+#| include: false
+library(tidyverse)
 
+interval_min <- 15                       # schedule: one run every 15 minutes
+runs_per_day <- 24 * 60 / interval_min   # = 96
+
+check_log <- read_csv("data/check_log.csv", show_col_types = FALSE) %>%
+  mutate(
+    ts   = with_tz(as_datetime(run_at_utc), "Europe/Vienna"),
+    date = as_date(ts)
+  )
+
+# Executed vs. scheduled runs
+first_ts <- min(check_log$ts)
+last_ts  <- max(check_log$ts)
+executed <- nrow(check_log)
+expected <- floor(as.numeric(difftime(last_ts, first_ts, units = "mins")) / interval_min) + 1
+exec_pct <- round(executed / expected * 100, 1)
+
+# Outcome of the executed runs
+n_pass   <- sum(check_log$overall == "PASS")
+n_fail   <- sum(check_log$overall == "FAIL")
+pass_pct <- round(n_pass / executed * 100, 1)
+
+# Runs per day; first and last day are only partly covered
+first_day <- min(check_log$date)
+last_day  <- max(check_log$date)
+
+daily <- check_log %>%
+  mutate(overall = factor(overall, levels = c("PASS", "FAIL"))) %>%
+  count(date, overall, name = "runs", .drop = FALSE) %>%
+  mutate(partial = date %in% c(first_day, last_day))
+
+avg_full_day <- daily %>%
+  filter(!partial) %>%
+  group_by(date) %>%
+  summarise(runs = sum(runs), .groups = "drop") %>%
+  summarise(avg = round(mean(runs))) %>%
+  pull(avg)
+```
+
+## How many scheduled runs actually happened?
+
+The collector was scheduled to run every `r interval_min` minutes. Between `r format(first_ts, "%d %b %Y, %H:%M")` and `r format(last_ts, "%d %b %Y, %H:%M")` (Vienna time) this corresponds to about `r expected` runs. The log contains only `r executed` runs, i.e. `r exec_pct`% of the schedule. On the days that are fully covered, on average only `r avg_full_day` runs per day were recorded, compared with the `r runs_per_day` that a perfectly regular schedule would produce. Missing runs are therefore not an exception but the normal case. This is consistent with the fact that GitHub may delay or drop scheduled workflows when its servers are busy, so the schedule should be read as "at most every `r interval_min` minutes", not as a guarantee.
+
+## What does the 100% PASS mean?
+
+```{r}
+#| label: pass-share
+#| eval: !expr file.exists("data/check_log.csv")
+#| #| include: false
 check_log %>%
   count(overall, name = "runs") %>%
   mutate(share_pct = round(runs / sum(runs) * 100, 1))
 ```
 
-If runs failed, this shows which checks were the reason:
+Of the `r executed` runs that were executed, `r n_pass` passed all checks (`r pass_pct`%) and `r n_fail` failed. This share only describes runs that actually took place. A scheduled run that never started leaves no entry in the log, so a high pass rate does not show that no data were missed. To judge completeness, the pass rate has to be read together with the coverage of `r exec_pct`% reported above.
 
-```{r}
-#| eval: !expr file.exists("data/check_log.csv")
-#| output: true
-check_log %>%
-  filter(overall == "FAIL") %>%
-  separate_rows(failed_checks, sep = ";") %>%
-  count(failed_checks, sort = TRUE, name = "times")
-```
-
-And the runs per day show whether the scheduler really ran all the time. At one run every 15 minutes, a full day has 96 runs; fewer runs mean that GitHub skipped or delayed some:
-
-```{r}
-#| eval: !expr file.exists("data/check_log.csv")
-#| output: true
-check_log %>%
-  mutate(
-    ts = with_tz(as_datetime(run_at_utc), "Europe/Vienna"),
-    date = as_date(ts)
-  ) %>%
-  count(date, overall, name = "runs") %>%
-  ggplot(aes(x = date, y = runs, fill = overall)) +
-  geom_col() +
-  geom_hline(yintercept = 96, linetype = "dashed") +
-  scale_fill_manual(values = c(PASS = "#2a9d8f", FAIL = "#e76f51")) +
-  labs(title = "Collector runs per day", x = NULL, y = "Runs", fill = NULL) +
-  theme_minimal()
-```
+Moreover, some runs failed when saving the data, because two commits were pushed to the repository at the same time and Git could not merge the changes to the CSV files. The snapshot of such a run is lost, and because the log row is saved in the same step, these failures do not appear in check_log.csv; they are only visible as red runs in the GitHub Actions tab.
 
 # What the data shows
 

@@ -1,0 +1,148 @@
+The following chunks are only evaluated if the file `data/check_log.csv` exists.
+
+```{r}
+#| label: setup-check-log
+#| eval: !expr file.exists("data/check_log.csv")
+library(tidyverse)
+
+interval_min <- 15                       # schedule: one run every 15 minutes
+runs_per_day <- 24 * 60 / interval_min   # = 96
+
+check_log <- read_csv("data/check_log.csv", show_col_types = FALSE) %>%
+  mutate(
+    ts   = with_tz(as_datetime(run_at_utc), "Europe/Vienna"),
+    date = as_date(ts)
+  )
+
+# Executed vs. scheduled runs
+first_ts <- min(check_log$ts)
+last_ts  <- max(check_log$ts)
+executed <- nrow(check_log)
+expected <- floor(as.numeric(difftime(last_ts, first_ts, units = "mins")) / interval_min) + 1
+exec_pct <- round(executed / expected * 100, 1)
+
+# Outcome of the executed runs
+n_pass   <- sum(check_log$overall == "PASS")
+n_fail   <- sum(check_log$overall == "FAIL")
+pass_pct <- round(n_pass / executed * 100, 1)
+
+# Runs per day; first and last day are only partly covered
+first_day <- min(check_log$date)
+last_day  <- max(check_log$date)
+
+daily <- check_log %>%
+  mutate(overall = factor(overall, levels = c("PASS", "FAIL"))) %>%
+  count(date, overall, name = "runs", .drop = FALSE) %>%
+  mutate(partial = date %in% c(first_day, last_day))
+
+avg_full_day <- daily %>%
+  filter(!partial) %>%
+  group_by(date) %>%
+  summarise(runs = sum(runs), .groups = "drop") %>%
+  summarise(avg = round(mean(runs))) %>%
+  pull(avg)
+```
+
+## How many scheduled runs actually happened?
+
+The collector was scheduled to run every `r interval_min` minutes. Between
+`r format(first_ts, "%d %b %Y, %H:%M")` and `r format(last_ts, "%d %b %Y, %H:%M")`
+(Vienna time) this corresponds to about `r expected` runs. The log contains only
+`r executed` runs, i.e. `r exec_pct`% of the schedule. On the days that are fully
+covered, on average only `r avg_full_day` runs per day were recorded, compared with
+the `r runs_per_day` that a perfectly regular schedule would produce. Missing runs
+are therefore not an exception but the normal case. This is consistent with the
+fact that GitHub may delay or drop scheduled workflows when its servers are busy,
+so the schedule should be read as "at most every `r interval_min` minutes", not as
+a guarantee.
+
+## What does the 100% PASS mean?
+
+```{r}
+#| label: pass-share
+#| eval: !expr file.exists("data/check_log.csv")
+check_log %>%
+  count(overall, name = "runs") %>%
+  mutate(share_pct = round(runs / sum(runs) * 100, 1))
+```
+
+Of the `r executed` runs that were executed, `r n_pass` passed all checks
+(`r pass_pct`%) and `r n_fail` failed. This share only describes runs that
+actually took place. A scheduled run that never started leaves no entry in the
+log, so a high pass rate does not show that no data were missed. To judge
+completeness, the pass rate has to be read together with the coverage of
+`r exec_pct`% reported above.
+
+```{r}
+#| label: failed-checks
+#| eval: !expr file.exists("data/check_log.csv")
+#| results: asis
+failed <- check_log %>%
+  filter(overall == "FAIL") %>%
+  separate_rows(failed_checks, sep = ";") %>%
+  count(failed_checks, sort = TRUE, name = "times")
+
+if (nrow(failed) == 0) {
+  cat("**No failed runs.** All executed runs passed every check.\n")
+} else {
+  cat("Failed runs by the check that caused them:\n\n")
+  cat(knitr::kable(failed, format = "markdown"), sep = "\n")
+}
+```
+
+## Runs per day
+
+```{r}
+#| label: runs-per-day
+#| eval: !expr file.exists("data/check_log.csv")
+#| fig-alt: "Bar chart of collector runs per day, with a dashed line at 96 expected runs"
+ggplot(daily, aes(x = date, y = runs, fill = overall, alpha = partial)) +
+  geom_col() +
+  geom_hline(yintercept = runs_per_day, linetype = "dashed") +
+  annotate(
+    "text", x = first_day, y = runs_per_day,
+    label = paste0("expected: ", runs_per_day, " runs/day"),
+    hjust = 0, vjust = -0.6
+  ) +
+  scale_fill_manual(values = c(PASS = "#2a9d8f", FAIL = "#e76f51"), drop = FALSE) +
+  scale_alpha_manual(
+    values = c(`FALSE` = 1, `TRUE` = 0.45),
+    labels = c(`FALSE` = "full day", `TRUE` = "partial day")
+  ) +
+  scale_x_date(date_labels = "%b %d", date_breaks = "1 day") +
+  expand_limits(y = runs_per_day * 1.1) +
+  labs(
+    title = "Collector runs per day",
+    x = NULL, y = "Runs", fill = NULL, alpha = NULL
+  ) +
+  theme_minimal()
+```
+
+The first day (`r format(first_day, "%d %b")`) and the last day
+(`r format(last_day, "%d %b")`) are only partly covered by the observation
+period, so their bars are lower and shown in a lighter shade. They should not be
+read as days on which the scheduler failed. The dashed line marks the 96 runs
+per day expected at one run every `r interval_min` minutes; the gap between the
+bars of the full days and this line is the number of skipped or delayed runs.
+
+## Self-test: does the failure branch work?
+
+A log that only ever shows PASS can also mean that the checks are too weak. The
+chunk below runs the failure analysis on a small artificial log in which two
+runs fail, to show that the code does report failed checks. To test the real
+checks, make your script fail on purpose once (for example by pointing it to a
+wrong URL) and look for a FAIL entry in `data/check_log.csv`.
+
+```{r}
+#| label: failure-selftest
+#| eval: !expr file.exists("data/check_log.csv")
+test_log <- tibble(
+  overall = c("PASS", "FAIL", "FAIL"),
+  failed_checks = c(NA, "row_count;no_missing", "row_count")
+)
+
+test_log %>%
+  filter(overall == "FAIL") %>%
+  separate_rows(failed_checks, sep = ";") %>%
+  count(failed_checks, sort = TRUE, name = "times")
+```
