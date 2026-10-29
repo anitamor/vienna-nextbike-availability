@@ -72,6 +72,10 @@ api_data$data$en$feeds
 The list of feeds contains the addresses of `station_status` and `station_information`. The current status of all stations:
 
 ```{r}
+#| eval: true
+#| echo: true
+#| output: true
+
 status_url <- "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_status.json"
 
 status_data <- jsonlite::fromJSON(status_url)
@@ -89,6 +93,10 @@ head(status_data$data$stations[
 And the fixed information about each station:
 
 ```{r}
+#| eval: true
+#| echo: true
+#| output: true
+
 info_url <- "https://gbfs.nextbike.net/maps/gbfs/v2/nextbike_wr/en/station_information.json"
 
 info_data <- jsonlite::fromJSON(info_url)
@@ -301,6 +309,7 @@ What the parts do:
 - **Running the script:** `continue-on-error: true` means that the workflow does not stop when the script ends with exit code 1. This is important: otherwise the next step would be skipped and the FAIL line in the log would be lost.
 - **Saving:** the files the script writes only exist on GitHub's server during the run, so this step commits them back to the repository. If nothing changed, it does nothing. `git pull --rebase` first takes over any commits that were pushed in the meantime, so that the push does not fail.
 - **Reporting:** if the script failed, the last step ends with an error on purpose. The run then gets a red cross in the Actions tab, so a failed run is visible without opening the log, while its log line has still been saved.
+
 
 # Did the automation work?
 
