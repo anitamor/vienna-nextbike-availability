@@ -6,7 +6,7 @@ This is a student project for the course *Data Science and Machine learning* at 
 
 ## Idea
 
-Bike-share stations are sometimes empty, so there is no bike to rent. Which stations are most often empty, and at what time of day? Answering this needs data over several days, and the numbers change every minute, so collecting it by hand is not practical. The project automates it:
+Bike-share users may arrive at a station only to find that no bikes are available. This project investigates which stations in Vienna are most frequently empty and at what times of day. Answering these questions requires collecting data at regular intervals over several days. Since bike availability changes continuously, manual data collection would be impractical. To address this, the project implements an automated workflow for data collection, validation, and storage.
 
 ```
 nextbike API --> R script (update_data.R) --> checks --> data/snapshots.csv
